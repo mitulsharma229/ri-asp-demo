@@ -43,8 +43,10 @@ interface IValidationItem {
 }
 
 const sampleValidationItems: IValidationItem[] = [
-  { id: 'v1', name: 'Missing amendment based on Future Product added', type: 'Error', description: 'Associated amendment is required M1174 to support the relevant Future Product', navigateTo: 'amendments' },
-  { id: 'v2', name: 'Missing amendment based on Future Product added', type: 'Error', description: 'Associated amendment is required M1174 to support the relevant Future Product', navigateTo: 'amendments' },
+  { id: 'v1', name: 'Missing amendment based on Future Product added', type: 'Error', description: 'Associated amendment M1174 is required to support "Fabric Capacity Reservation - US East" in group M1174. Add and populate the amendment to proceed.', navigateTo: 'amendments' },
+  { id: 'v2', name: 'Missing values in added amendment', type: 'Error', description: 'Amendment M919 has empty fields: "Discount Start Date" and "Discount End Date" in Table 1, rows 3-5. Open the amendment to populate these values.', navigateTo: 'amendments' },
+  { id: 'v3', name: 'Missing region for product', type: 'Error', description: 'Product "Azure Savings Plan - Compute - 1 year" (ASP-11111) is missing a region value. Navigate to products and configure the region.', navigateTo: 'products' },
+  { id: 'v4', name: 'Missing commitment for product', type: 'Warning', description: 'Products "Fabric Capacity Reservation - US Central" and "Fabric Capacity Reservation - EU North" do not have a commitment value set. Configure before generating documents.', navigateTo: 'products' },
 ];
 
 export interface IErrorsWarningsViewProps {

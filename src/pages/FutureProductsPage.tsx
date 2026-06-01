@@ -1,9 +1,7 @@
 import * as React from 'react';
 import { Pivot, PivotItem } from '@fluentui/react/lib/Pivot';
-import { CommandBar, ICommandBarItemProps } from '@fluentui/react/lib/CommandBar';
 import { Stack } from '@fluentui/react/lib/Stack';
 import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
-import { SearchBox } from '@fluentui/react/lib/SearchBox';
 import { useTheme, ITheme } from '@fluentui/react';
 import { mergeStyleSets } from '@fluentui/merge-styles';
 import { memoizeFunction } from '@fluentui/utilities';
@@ -95,12 +93,15 @@ const getClassNames = memoizeFunction((theme: ITheme) =>
 const convertCatalogToAdded = (catalog: ICatalogProduct): IAddedProduct => {
   const regionFromDetails = catalog.productDetails.match(/- ([A-Z][a-z]+ ?[A-Za-z]*)$/)?.[1] || '';
   const basePrice = catalog.listPriceNetUSD || 500.00;
+  const tenants = (catalog.amendmentCode === 'M919' || catalog.amendmentCode === 'M(111)')
+    ? ['tenant-a', 'tenant-b', 'tenant-c']
+    : ['tenant-a', 'tenant-b'];
   return {
     id: catalog.id,
     productDetails: catalog.productDetails,
     productFamily: catalog.productFamily,
     amendmentCode: catalog.amendmentCode,
-    region: regionFromDetails || 'US West',
+    regions: regionFromDetails ? [regionFromDetails] : ['US West'],
     commitment: '3 Years',
     discountPercent: 0,
     startDate: 'Mar 21, 2026',
@@ -110,11 +111,8 @@ const convertCatalogToAdded = (catalog: ICatalogProduct): IAddedProduct => {
     partNumber: catalog.partNumber,
     offering: catalog.offering,
     regionApplicable: !!regionFromDetails,
-    groupName: catalog.amendmentCode === 'M919'
-      ? 'Placeholder grouping text'
-      : catalog.amendmentCode === 'M920'
-      ? 'Placeholder grouping text'
-      : 'Placeholder grouping text',
+    groupName: catalog.amendmentCode,
+    tenants,
   };
 };
 
@@ -125,16 +123,23 @@ export const FutureProductsPage: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<PivotTab>('riaspFutureProducts');
   const [flowStep, setFlowStep] = React.useState<FlowStep>('products');
   const [products, setProducts] = React.useState<IAddedProduct[]>([]);
+  const [availableTenants, setAvailableTenants] = React.useState<string[]>([]);
   const [isSearchPanelOpen, setIsSearchPanelOpen] = React.useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
   const [successMessage, setSuccessMessage] = React.useState('');
+  const [showConfigWarning, setShowConfigWarning] = React.useState(false);
+  const [isGridEditing, setIsGridEditing] = React.useState(false);
 
   const handleAddProducts = React.useCallback(() => {
     setIsSearchPanelOpen(true);
   }, []);
 
-  const handleConfirmSelection = React.useCallback((selectedProducts: ICatalogProduct[]) => {
-    const newProducts = selectedProducts.map(convertCatalogToAdded);
+  const handleConfirmSelection = React.useCallback((selectedProducts: ICatalogProduct[], selectedTenants: string[]) => {
+    const newProducts = selectedProducts.map((p) => ({ ...convertCatalogToAdded(p), tenants: selectedTenants }));
+    setAvailableTenants((prev) => {
+      const merged = new Set([...prev, ...selectedTenants]);
+      return Array.from(merged);
+    });
     setProducts((prev) => {
       const existingIds = new Set(prev.map((p) => p.id));
       const unique = newProducts.filter((p) => !existingIds.has(p.id));
@@ -143,6 +148,7 @@ export const FutureProductsPage: React.FC = () => {
     setIsSearchPanelOpen(false);
     setSuccessMessage(`${selectedProducts.length} products added successfully!`);
     setHasUnsavedChanges(true);
+    setShowConfigWarning(true);
     setTimeout(() => setSuccessMessage(''), 5000);
   }, []);
 
@@ -158,12 +164,24 @@ export const FutureProductsPage: React.FC = () => {
     setHasUnsavedChanges(true);
   }, []);
 
+  const handleDuplicateProducts = React.useCallback((ids: string[]) => {
+    setProducts((prev) => {
+      const duplicates = prev
+        .filter((p) => ids.includes(p.id))
+        .map((p) => ({ ...p, id: `${p.id}-dup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` }));
+      return [...prev, ...duplicates];
+    });
+    setHasUnsavedChanges(true);
+    setSuccessMessage(`${ids.length} product(s) duplicated successfully!`);
+    setTimeout(() => setSuccessMessage(''), 5000);
+  }, []);
+
   const handleBulkEditApply = React.useCallback((ids: string[], values: IBulkEditValues) => {
     setProducts((prev) =>
       prev.map((p) => {
         if (!ids.includes(p.id)) return p;
         const updated = { ...p };
-        if (values.region) updated.region = values.region;
+        if (values.regions && values.regions.length > 0) updated.regions = values.regions;
         if (values.commitment) updated.commitment = values.commitment;
         if (values.discountPercent !== undefined) {
           updated.discountPercent = values.discountPercent;
@@ -183,12 +201,16 @@ export const FutureProductsPage: React.FC = () => {
           if (!isNaN(start.getTime())) {
             const end = new Date(start);
             const d = values.endDateDuration;
-            if (d === '3 Months') end.setMonth(end.getMonth() + 3);
-            else if (d === '6 Months') end.setMonth(end.getMonth() + 6);
-            else if (d === '9 Months') end.setMonth(end.getMonth() + 9);
-            else if (d === '1 Year') end.setFullYear(end.getFullYear() + 1);
-            else if (d === '2 Years') end.setFullYear(end.getFullYear() + 2);
-            else if (d === '3 Years') end.setFullYear(end.getFullYear() + 3);
+            if (d === '3 months') end.setMonth(end.getMonth() + 3);
+            else if (d === '6 months') end.setMonth(end.getMonth() + 6);
+            else if (d === '9 months') end.setMonth(end.getMonth() + 9);
+            else if (d === '10 months') end.setMonth(end.getMonth() + 10);
+            else if (d === '11 months') end.setMonth(end.getMonth() + 11);
+            else if (d === '1 year') end.setFullYear(end.getFullYear() + 1);
+            else if (d === '18 months') end.setMonth(end.getMonth() + 18);
+            else if (d === '2 years') end.setFullYear(end.getFullYear() + 2);
+            else if (d === '3 years') end.setFullYear(end.getFullYear() + 3);
+            else if (d === '5 years') end.setFullYear(end.getFullYear() + 5);
             updated.endDate = end.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
           }
         } else if (values.endDate) {
@@ -224,43 +246,13 @@ export const FutureProductsPage: React.FC = () => {
     }
   }, [flowStep]);
 
-  // CommandBar items for the products tab
-  const mainCommandBarItems: ICommandBarItemProps[] = React.useMemo(
-    () => [
-      { key: 'edit', text: 'Edit', iconProps: { iconName: 'Edit' }, onClick: () => {} },
-      { key: 'showHide', text: 'Show/Hide from CPS', iconProps: { iconName: 'View' }, onClick: () => {} },
-      { key: 'bulkRamp', text: 'Bulk / Ramp discount', iconProps: { iconName: 'CalculatorPercentage' }, onClick: () => {} },
-      { key: 'viewPrices', text: 'View Prices : Net', iconProps: { iconName: 'Money' }, onClick: () => {} },
-      { key: 'export', text: 'Export to Excel', iconProps: { iconName: 'ExcelDocument' }, onClick: () => {} },
-      { key: 'groupSettings', text: 'Group settings', iconProps: { iconName: 'GroupObject' }, onClick: () => {} },
-    ],
-    []
-  );
-
-  const mainCommandBarFarItems: ICommandBarItemProps[] = React.useMemo(
-    () => [
-      { key: 'showHideColumns', text: 'Show//Hide Columns', iconProps: { iconName: 'ColumnOptions' }, onClick: () => {} },
-      { key: 'filter', text: 'Filter (1)', iconProps: { iconName: 'Filter' }, onClick: () => {} },
-      {
-        key: 'search',
-        onRender: () => (
-          <SearchBox
-            placeholder="Search"
-            styles={{ root: { width: 180, alignSelf: 'center' } }}
-          />
-        ),
-      },
-    ],
-    []
-  );
-
   const renderProductsView = () => {
     if (products.length === 0) {
-      return <EmptyState onAddProducts={handleAddProducts} />;
+      return <EmptyState onAddProducts={handleAddProducts} buttonText="Add RI/ASP Future Products" />;
     }
 
     return (
-      <Stack tokens={{ childrenGap: 0 }} styles={{ root: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}>
+      <Stack tokens={{ childrenGap: 8 }} styles={{ root: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}>
         {successMessage && (
           <MessageBar
             messageBarType={MessageBarType.success}
@@ -271,14 +263,27 @@ export const FutureProductsPage: React.FC = () => {
             {successMessage}
           </MessageBar>
         )}
+        {showConfigWarning && (
+          <MessageBar
+            messageBarType={MessageBarType.info}
+            onDismiss={() => setShowConfigWarning(false)}
+            dismissButtonAriaLabel="Close"
+            styles={{ root: { margin: '0 16px', flexShrink: 0 } }}
+          >
+            Make sure you have populated all the required configuration fields before proceeding.
+          </MessageBar>
+        )}
         <ProductGrid
           products={products}
           onUpdateProduct={handleUpdateProduct}
           onDeleteProducts={handleDeleteProducts}
+          onDuplicateProducts={handleDuplicateProducts}
           onBulkEditApply={handleBulkEditApply}
           onSave={handleSave}
           onAddProducts={handleAddProducts}
           hasUnsavedChanges={hasUnsavedChanges}
+          availableTenants={availableTenants}
+          onEditModeChange={setIsGridEditing}
         />
       </Stack>
     );
@@ -295,6 +300,7 @@ export const FutureProductsPage: React.FC = () => {
           <GenerateDocuments
             onComplete={() => setFlowStep('documents')}
             hasErrors={true}
+            onGoToErrors={() => setFlowStep('errorsWarnings')}
           />
         );
       case 'documents':
@@ -342,21 +348,11 @@ export const FutureProductsPage: React.FC = () => {
               </div>
 
               {activeTab === 'futureProducts' && (
-                <>
-                  <div className={classNames.commandBarArea}>
-                    <CommandBar items={mainCommandBarItems} farItems={mainCommandBarFarItems} />
-                  </div>
-                  <EmptyState onAddProducts={() => setActiveTab('riaspFutureProducts')} />
-                </>
+                <EmptyState onAddProducts={() => setActiveTab('riaspFutureProducts')} />
               )}
 
               {activeTab === 'optionalFutureProducts' && (
-                <>
-                  <div className={classNames.commandBarArea}>
-                    <CommandBar items={mainCommandBarItems} farItems={mainCommandBarFarItems} />
-                  </div>
-                  <EmptyState onAddProducts={() => setActiveTab('riaspFutureProducts')} />
-                </>
+                <EmptyState onAddProducts={() => setActiveTab('riaspFutureProducts')} />
               )}
 
               {activeTab === 'riaspFutureProducts' && renderProductsView()}
@@ -413,7 +409,7 @@ export const FutureProductsPage: React.FC = () => {
         onPrev={flowStep !== 'products' ? handlePrev : undefined}
         showPrev={flowStep !== 'products'}
         nextLabel={flowStep === 'generate' ? 'Generate final documents & Send for approval' : 'Next'}
-        nextDisabled={products.length === 0}
+        nextDisabled={products.length === 0 || isGridEditing}
       />
 
       <ProductSearchPanel

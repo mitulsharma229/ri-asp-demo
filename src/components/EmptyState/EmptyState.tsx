@@ -27,9 +27,10 @@ const getClassNames = memoizeFunction((_theme: ITheme) =>
 
 export interface IEmptyStateProps {
   onAddProducts: () => void;
+  buttonText?: string;
 }
 
-export const EmptyState: React.FC<IEmptyStateProps> = ({ onAddProducts }) => {
+export const EmptyState: React.FC<IEmptyStateProps> = ({ onAddProducts, buttonText }) => {
   const theme = useTheme();
   const classNames = getClassNames(theme);
 
@@ -60,7 +61,7 @@ export const EmptyState: React.FC<IEmptyStateProps> = ({ onAddProducts }) => {
         Click below to start adding the products.
       </Text>
       <PrimaryButton
-        text="Add Products"
+        text={buttonText || "Add Products"}
         iconProps={{ iconName: 'Add' }}
         onClick={onAddProducts}
         styles={{ root: { marginTop: 8 } }}

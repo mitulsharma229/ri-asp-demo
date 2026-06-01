@@ -17,40 +17,51 @@ import { memoizeFunction } from '@fluentui/utilities';
 import { ICatalogProduct, TENANT_OPTIONS } from '../../types/models';
 
 type WizardStep = 'search' | 'review' | 'configure';
-type SubView = 'main' | 'addedProducts' | 'showErrors';
-
-const AMENDMENT_CODES: IDropdownOption[] = [
-  { key: 'M919', text: 'M919' },
-  { key: 'M920', text: 'M920' },
-  { key: 'M1012', text: 'M1012' },
-  { key: 'M1174', text: 'M1174' },
-];
+type SubView = 'main' | 'addedProducts';
 
 const SEARCH_PAGE_SIZE = 10;
 const REVIEW_PAGE_SIZE = 10;
 
-const isAmendmentCodeQuery = (query: string): boolean => /^M\d+/i.test(query.trim());
-
-const COMMITMENT_FILTER_OPTIONS: IDropdownOption[] = [
+const PRODUCT_TYPE_FILTER_OPTIONS: IDropdownOption[] = [
   { key: 'All', text: 'All' },
-  { key: '1 Month', text: '1 Month' },
-  { key: '1 Year', text: '1 Year' },
-  { key: '3 Years', text: '3 Years' },
-  { key: '5 Years', text: '5 Years' },
+  { key: 'RI', text: 'Reserved Instances (RI)' },
+  { key: 'ASP', text: 'Azure Savings Plan (ASP)' },
+  { key: 'RI and ASP', text: 'RI and ASP' },
+];
+const PRODUCT_FAMILY_FILTER_OPTIONS: IDropdownOption[] = [
+  { key: 'All', text: 'All' },
+  { key: 'System Center Endpoint Protection', text: 'System Center Endpoint Protection' },
+  { key: 'Azure Compute', text: 'Azure Compute' },
+  { key: 'Azure Database', text: 'Azure Database' },
+  { key: 'Azure Storage', text: 'Azure Storage' },
+  { key: 'Azure Networking', text: 'Azure Networking' },
 ];
 const REGION_FILTER_OPTIONS: IDropdownOption[] = [
   { key: 'All', text: 'All' },
-  { key: 'US West', text: 'US West' },
+  { key: 'US North', text: 'US North' },
+  { key: 'US South', text: 'US South' },
   { key: 'US East', text: 'US East' },
+  { key: 'US West', text: 'US West' },
+  { key: 'US Central', text: 'US Central' },
   { key: 'EU West', text: 'EU West' },
   { key: 'EU North', text: 'EU North' },
-  { key: 'Asia Pacific', text: 'Asia Pacific' },
+  { key: 'Japan', text: 'Japan' },
+  { key: 'India', text: 'India' },
+  { key: 'Australia', text: 'Australia' },
 ];
 const METER_FILTER_OPTIONS: IDropdownOption[] = [
   { key: 'All', text: 'All' },
   { key: 'vCPU', text: 'vCPU' },
   { key: 'GB', text: 'GB' },
   { key: 'RU', text: 'RU' },
+];
+
+const AMENDMENT_DROPDOWN_OPTIONS: IDropdownOption[] = [
+  { key: 'M919', text: 'M919' },
+  { key: 'M920', text: 'M920' },
+  { key: 'M1174', text: 'M1174' },
+  { key: 'M(000)', text: 'M(000)' },
+  { key: 'M(111)', text: 'M(111)' },
 ];
 
 const getClassNames = memoizeFunction((theme: ITheme) =>
@@ -83,9 +94,6 @@ const getClassNames = memoizeFunction((theme: ITheme) =>
       selectors: { ':hover': { backgroundColor: theme.palette.neutralLight } },
     },
     chipClose: { cursor: 'pointer', color: theme.palette.neutralSecondary, fontSize: 10 },
-    warningBar: {
-      backgroundColor: '#FFF4CE', border: '1px solid #FFB900', borderRadius: 4, padding: '8px 12px',
-    },
     partNumber: { fontWeight: 600, fontSize: 13 },
     productDesc: { fontSize: 12, color: theme.palette.neutralSecondary },
     paginationBar: {
@@ -128,7 +136,7 @@ export interface IProductSearchPanelProps {
   isOpen: boolean;
   onDismiss: () => void;
   catalogProducts: ICatalogProduct[];
-  onConfirmSelection: (selectedProducts: ICatalogProduct[]) => void;
+  onConfirmSelection: (selectedProducts: ICatalogProduct[], selectedTenants: string[]) => void;
 }
 
 // Searchable multi-select dropdown with Apply
@@ -240,7 +248,6 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
   const [hasSearched, setHasSearched] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
   const [selectedTenants, setSelectedTenants] = React.useState<string[]>([]);
-  const [searchFilter, setSearchFilter] = React.useState<string>('default');
   const [searchInputValue, setSearchInputValue] = React.useState('');
   const [addedProductsSearch, setAddedProductsSearch] = React.useState('');
   const [productAmendmentMap, setProductAmendmentMap] = React.useState<Map<string, string>>(new Map());
@@ -282,7 +289,6 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
       setHasSearched(false);
       setSelectedIds(new Set());
       setSelectedTenants([]);
-      setSearchFilter('default');
       setAddedProductsSearch('');
       setProductAmendmentMap(new Map());
       setSearchPage(0);
@@ -300,28 +306,16 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
     }
   }, [isOpen]);
 
-  const queryLooksLikeAmendment = React.useMemo(
-    () => searchFilter === 'default' && isAmendmentCodeQuery(searchQuery),
-    [searchFilter, searchQuery]
-  );
-
   const filteredProducts = React.useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
     let results = catalogProducts.filter((p) => {
-      switch (searchFilter) {
-        case 'amendment':
-          return p.amendmentCode.toLowerCase().includes(q);
-        case 'productName':
-          return p.productDetails.toLowerCase().includes(q);
-        default:
-          return (
-            p.productDetails.toLowerCase().includes(q) ||
-            p.productFamily.toLowerCase().includes(q) ||
-            p.partNumber.toLowerCase().includes(q) ||
-            p.amendmentCode.toLowerCase().includes(q)
-          );
-      }
+      return (
+        p.productDetails.toLowerCase().includes(q) ||
+        p.productFamily.toLowerCase().includes(q) ||
+        p.partNumber.toLowerCase().includes(q) ||
+        p.amendmentCode.toLowerCase().includes(q)
+      );
     });
 
     // Apply search step filters
@@ -337,7 +331,7 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
     }
 
     return results;
-  }, [catalogProducts, searchQuery, searchFilter, searchRegionFilter, searchMeterNameFilter]);
+  }, [catalogProducts, searchQuery, searchRegionFilter, searchMeterNameFilter]);
 
   // Paginated search results
   const searchTotalPages = Math.max(1, Math.ceil(filteredProducts.length / SEARCH_PAGE_SIZE));
@@ -346,14 +340,13 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
     (searchPage + 1) * SEARCH_PAGE_SIZE
   );
 
-  React.useEffect(() => { setSearchPage(0); }, [searchQuery, searchFilter, searchRegionFilter, searchMeterNameFilter]);
+  React.useEffect(() => { setSearchPage(0); }, [searchQuery, searchRegionFilter, searchMeterNameFilter]);
 
   const selectedProducts = React.useMemo(
     () => catalogProducts.filter((p) => selectedIds.has(p.id)),
     [catalogProducts, selectedIds]
   );
 
-  // Filtered review products
   const filteredReviewProducts = React.useMemo(() => {
     let results = selectedProducts;
     if (regionFilter !== 'All') {
@@ -379,7 +372,6 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
   React.useEffect(() => { setReviewPage(0); }, [regionFilter, meterNameFilter, commitmentFilter]);
 
   const validSelected = selectedProducts.filter((p) => p.status === 'Valid');
-  const invalidSelected = selectedProducts.filter((p) => p.status === 'Invalid');
 
   const toggleSelection = React.useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -423,56 +415,53 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
     });
   }, []);
 
-  const showPerRowAmendmentDropdown = searchFilter === 'productName' || (searchFilter === 'default' && !queryLooksLikeAmendment && hasSearched && searchQuery.trim().length > 0);
+  const isAmendmentSearch = React.useMemo(() => {
+    return /^M\d{3,4}$/i.test(searchQuery.trim()) || /^M\(\d{3}\)$/i.test(searchQuery.trim());
+  }, [searchQuery]);
+
+  const getDefaultAmendmentForProduct = (product: ICatalogProduct): string => {
+    if (isAmendmentSearch && searchQuery.trim()) return searchQuery.trim().toUpperCase();
+    if (product.amendmentCode) return product.amendmentCode;
+    return 'M919';
+  };
 
   const makeSearchColumns = (items: ICatalogProduct[]): IColumn[] => {
     const allChecked = items.length > 0 && items.every((p) => selectedIds.has(p.id));
-    const cols: IColumn[] = [
+    return [
       {
         key: 'checkbox', name: '', minWidth: 32, maxWidth: 32,
         onRenderHeader: () => <Checkbox checked={allChecked} onChange={() => toggleSelectAll(items)} styles={{ root: { marginLeft: 4 } }} />,
         onRender: (item: ICatalogProduct) => <Checkbox checked={selectedIds.has(item.id)} onChange={() => toggleSelection(item.id)} />,
       },
       {
-        key: 'productDetails', name: 'Product Details', minWidth: 160, maxWidth: 260, isResizable: true,
+        key: 'productDetails', name: 'Product details', minWidth: 220, maxWidth: 320, isResizable: true,
         onRender: (item: ICatalogProduct) => (
-          <Stack tokens={{ childrenGap: 2 }}>
-            <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 6 }}>
-              <Icon iconName={item.status === 'Valid' ? 'SkypeCircleCheck' : 'ErrorBadge'} styles={{ root: { color: item.status === 'Valid' ? '#107C10' : '#A80000', fontSize: 14 } }} />
-              <Text className={classNames.partNumber}>{item.partNumber}</Text>
-            </Stack>
+          <Stack tokens={{ childrenGap: 2 }} styles={{ root: { whiteSpace: 'normal', wordBreak: 'break-word' } }}>
+            <Text className={classNames.partNumber}>{item.partNumber}</Text>
             <Text className={classNames.productDesc}>{item.productDetails}</Text>
           </Stack>
         ),
       },
-      { key: 'productFamily', name: 'Product family', fieldName: 'productFamily', minWidth: 110, maxWidth: 150, isResizable: true },
+      { key: 'productFamily', name: 'Product family', fieldName: 'productFamily', minWidth: 120, maxWidth: 160, isResizable: true },
+      {
+        key: 'amendment', name: 'Amendment', minWidth: 120, maxWidth: 140, isResizable: true,
+        onRender: (item: ICatalogProduct) => {
+          const currentVal = productAmendmentMap.get(item.id) || getDefaultAmendmentForProduct(item);
+          return (
+            <Dropdown
+              selectedKey={currentVal}
+              options={AMENDMENT_DROPDOWN_OPTIONS}
+              onChange={(_, opt) => {
+                if (opt) handleSetAmendmentCode(item.id, opt.key as string);
+              }}
+              styles={{ root: { width: '100%' }, dropdown: { minWidth: 0 } }}
+            />
+          );
+        },
+      },
+      { key: 'productList', name: 'Product list', fieldName: 'productList', minWidth: 120, maxWidth: 160, isResizable: true },
+      { key: 'offering', name: 'Offering', fieldName: 'offering', minWidth: 70, maxWidth: 90 },
     ];
-
-    if (showPerRowAmendmentDropdown) {
-      cols.push({
-        key: 'amendmentCode', name: 'Amendment Code', minWidth: 130, maxWidth: 160,
-        onRender: (item: ICatalogProduct) => (
-          <Dropdown
-            placeholder="Select amendment"
-            selectedKey={productAmendmentMap.get(item.id) || item.amendmentCode}
-            options={AMENDMENT_CODES}
-            onChange={(_, opt) => {
-              if (opt) handleSetAmendmentCode(item.id, opt.key as string);
-            }}
-            styles={{ dropdown: { minWidth: 120 } }}
-          />
-        ),
-      });
-    }
-
-    cols.push(
-      { key: 'pricingUnit', name: 'Pricing Unit', fieldName: 'pricingUnit', minWidth: 70, maxWidth: 90 },
-      { key: 'priceLevel', name: 'Price Level', fieldName: 'priceLevel', minWidth: 50, maxWidth: 70 },
-      { key: 'listPriceNetUSD', name: 'List Price - Net USD', minWidth: 90, maxWidth: 120, onRender: (item: ICatalogProduct) => <Text>$ {item.listPriceNetUSD.toFixed(0)}</Text> },
-      { key: 'status', name: 'Status', fieldName: 'status', minWidth: 50, maxWidth: 70 },
-    );
-
-    return cols;
   };
 
   const reviewColumns: IColumn[] = [
@@ -480,20 +469,14 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
       key: 'productDetails', name: 'Product Details', minWidth: 200, maxWidth: 300, isResizable: true,
       onRender: (item: ICatalogProduct) => (
         <Stack tokens={{ childrenGap: 2 }}>
-          <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 6 }}>
-            <Icon iconName={item.status === 'Valid' ? 'SkypeCircleCheck' : 'ErrorBadge'} styles={{ root: { color: item.status === 'Valid' ? '#107C10' : '#A80000', fontSize: 14 } }} />
-            <Text className={classNames.partNumber}>{item.partNumber}</Text>
-          </Stack>
+          <Text className={classNames.partNumber}>{item.partNumber}</Text>
           <Text className={classNames.productDesc}>{item.productDetails}</Text>
         </Stack>
       ),
     },
     { key: 'productFamily', name: 'Product family', fieldName: 'productFamily', minWidth: 130, maxWidth: 180, isResizable: true },
-    { key: 'productList', name: 'Product list', fieldName: 'productList', minWidth: 130, maxWidth: 160, isResizable: true },
     { key: 'pricingUnit', name: 'Pricing Unit', fieldName: 'pricingUnit', minWidth: 80, maxWidth: 100 },
-    { key: 'priceLevel', name: 'Price Level', fieldName: 'priceLevel', minWidth: 60, maxWidth: 80 },
-    { key: 'listPriceNetUSD', name: 'List Price - Net USD', minWidth: 100, maxWidth: 130, onRender: (item: ICatalogProduct) => <Text>$ {item.listPriceNetUSD.toFixed(0)}</Text> },
-    { key: 'status', name: 'Status', fieldName: 'status', minWidth: 60, maxWidth: 80 },
+    { key: 'listPriceNetUSD', name: 'List Price (USD)', minWidth: 100, maxWidth: 130, onRender: (item: ICatalogProduct) => <Text>$ {item.listPriceNetUSD.toFixed(0)}</Text> },
   ];
 
   const addedProductsColumns: IColumn[] = [
@@ -508,7 +491,6 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
     { key: 'productFamily', name: 'Product family', fieldName: 'productFamily', minWidth: 130, maxWidth: 180 },
     { key: 'productList', name: 'Product list', fieldName: 'productList', minWidth: 130, maxWidth: 160 },
     { key: 'offering', name: 'Offering', fieldName: 'offering', minWidth: 80, maxWidth: 100 },
-    { key: 'price', name: 'Price List (USD)', minWidth: 100, maxWidth: 120, onRender: (item: ICatalogProduct) => <Text>{item.listPriceNetUSD.toFixed(2)}</Text> },
     {
       key: 'delete', name: '', minWidth: 32, maxWidth: 32,
       onRender: (item: ICatalogProduct) => (
@@ -556,7 +538,7 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
           styles={{ root: { cursor: selectedIds.size > 0 ? 'pointer' : 'default' } }}>
           <Icon iconName="CheckMark" styles={{ root: { color: theme.palette.neutralSecondary, fontSize: 12 } }} />
           <Text className={classNames.addedProductsBadge}>
-            Added Products&nbsp;<strong>{selectedIds.size}</strong>
+            Added Products&nbsp;<strong>{currentStep === 'review' || currentStep === 'configure' ? validSelected.length : selectedIds.size}</strong>
           </Text>
         </Stack>
       </Stack>
@@ -600,28 +582,6 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
       </Stack>
     );
   };
-
-  const renderShowErrorsView = () => (
-    <Stack tokens={{ childrenGap: 12 }} styles={{ root: { flex: 1 } }}>
-      <Link onClick={() => setSubView('main')} styles={{ root: { fontSize: 13 } }}>
-        <Icon iconName="ChevronLeft" styles={{ root: { fontSize: 10, marginRight: 4 } }} />Back to Review
-      </Link>
-      <Text styles={{ root: { fontWeight: 600, fontSize: 16 } }}>Invalid Products</Text>
-      <Text styles={{ root: { fontSize: 13, color: theme.palette.neutralSecondary } }}>
-        The following {invalidSelected.length} product(s) are not valid and will not be added:
-      </Text>
-      {invalidSelected.map((p) => (
-        <Stack key={p.id} horizontal verticalAlign="center" tokens={{ childrenGap: 8 }}
-          styles={{ root: { padding: '8px 12px', backgroundColor: '#FDE7E9', borderRadius: 4 } }}>
-          <Icon iconName="ErrorBadge" styles={{ root: { color: '#A80000', fontSize: 16 } }} />
-          <Stack tokens={{ childrenGap: 2 }}>
-            <Text styles={{ root: { fontWeight: 600, fontSize: 13 } }}>{p.partNumber} - {p.productDetails}</Text>
-            <Text styles={{ root: { fontSize: 12, color: '#A80000' } }}>{p.invalidReason || 'Product is not valid for the current enrollment type'}</Text>
-          </Stack>
-        </Stack>
-      ))}
-    </Stack>
-  );
 
   const renderFilterPillCallout = (
     pillKey: string,
@@ -675,11 +635,11 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
         <Icon iconName="Filter" styles={{ root: { color: theme.palette.neutralSecondary } }} />
         <Text styles={{ root: { fontSize: 13, color: theme.palette.neutralSecondary } }}>Filter:</Text>
         <span ref={commitRef} className={classNames.filterChip} onClick={() => setActiveKey(`${prefix}_commitment`)}>
-          Commitment: <strong>{cFilter}</strong>
+          Product Type: <strong>{cFilter}</strong>
           <Icon iconName="ChevronDown" className={classNames.chipClose} />
         </span>
         <span ref={regionRef} className={classNames.filterChip} onClick={() => setActiveKey(`${prefix}_region`)}>
-          Region: <strong>{rFilter}</strong>
+          Product Family: <strong>{rFilter}</strong>
           <Icon iconName="ChevronDown" className={classNames.chipClose} />
         </span>
         <span ref={meterNameRef} className={classNames.filterChip} onClick={() => setActiveKey(`${prefix}_meterName`)}>
@@ -691,8 +651,8 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
           <Icon iconName="ChevronDown" className={classNames.chipClose} />
         </span>
       </Stack>
-      {renderFilterPillCallout(`${prefix}_commitment`, commitRef, COMMITMENT_FILTER_OPTIONS, cFilter, setCFilter, activeKey, setActiveKey)}
-      {renderFilterPillCallout(`${prefix}_region`, regionRef, REGION_FILTER_OPTIONS, rFilter, setRFilter, activeKey, setActiveKey)}
+      {renderFilterPillCallout(`${prefix}_commitment`, commitRef, PRODUCT_TYPE_FILTER_OPTIONS, cFilter, setCFilter, activeKey, setActiveKey)}
+      {renderFilterPillCallout(`${prefix}_region`, regionRef, PRODUCT_FAMILY_FILTER_OPTIONS, rFilter, setRFilter, activeKey, setActiveKey)}
       {renderFilterPillCallout(`${prefix}_meterName`, meterNameRef, METER_FILTER_OPTIONS, mnFilter, setMnFilter, activeKey, setActiveKey)}
       {renderFilterPillCallout(`${prefix}_meterId`, meterIdRef, METER_FILTER_OPTIONS, miFilter, setMiFilter, activeKey, setActiveKey)}
     </>
@@ -700,32 +660,14 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
 
   const renderSearchStep = () => (
     <Stack tokens={{ childrenGap: 8 }} styles={{ root: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' } }}>
-      <Stack horizontal tokens={{ childrenGap: 0 }} styles={{ root: { flexShrink: 0 } }}>
-        <Dropdown
-          selectedKey={searchFilter}
-          options={[
-            { key: 'default', text: 'Default' },
-            { key: 'amendment', text: 'Amendment code' },
-            { key: 'productName', text: 'Product name' },
-          ]}
-          onChange={(_, opt) => { setSearchFilter((opt?.key as string) || 'default'); }}
-          styles={{ root: { width: 160 }, dropdown: { borderRight: 'none', borderTopRightRadius: 0, borderBottomRightRadius: 0 } }}
-        />
-        <SearchBox
-          placeholder="Search by amendment code or product name"
-          value={searchInputValue}
-          onChange={(_, val) => handleSearch(val || '')}
-          onSearch={(val) => handleSearchSubmit(val || '')}
-          onClear={() => { setSearchInputValue(''); setSearchQuery(''); setHasSearched(false); }}
-          styles={{ root: { flex: 1 } }}
-        />
-      </Stack>
-
-      {showPerRowAmendmentDropdown && (
-        <MessageBar messageBarType={MessageBarType.info} isMultiline={false} styles={{ root: { flexShrink: 0 } }}>
-          Select an amendment code for each product using the dropdown in the Amendment Code column.
-        </MessageBar>
-      )}
+      <SearchBox
+        placeholder="Search by amendment code, product name, or part number"
+        value={searchInputValue}
+        onChange={(_, val) => handleSearch(val || '')}
+        onSearch={(val) => handleSearchSubmit(val || '')}
+        onClear={() => { setSearchInputValue(''); setSearchQuery(''); setHasSearched(false); }}
+        styles={{ root: { flexShrink: 0 } }}
+      />
 
       {!hasSearched || !searchQuery.trim() ? (
         <Stack horizontalAlign="center" className={classNames.emptyState}>
@@ -771,6 +713,9 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
 
   const renderReviewStep = () => (
     <Stack tokens={{ childrenGap: 12 }} styles={{ root: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' } }}>
+      <Link onClick={() => { setCurrentStep('search'); setSubView('main'); }} styles={{ root: { fontSize: 13, flexShrink: 0 } }}>
+        <Icon iconName="ChevronLeft" styles={{ root: { fontSize: 10, marginRight: 4 } }} />Back
+      </Link>
       <SearchBox placeholder="Search in review prices by part number, product description, product family or group" styles={{ root: { width: '100%', flexShrink: 0 } }} />
 
       {renderFilterBar(
@@ -781,26 +726,20 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
         activeFilterPill, setActiveFilterPill,
       )}
 
-      {invalidSelected.length > 0 && (
-        <Stack horizontal verticalAlign="center" className={classNames.warningBar} tokens={{ childrenGap: 8 }}>
-          <Icon iconName="ErrorBadge" styles={{ root: { color: '#A80000', flexShrink: 0 } }} />
-          <Text styles={{ root: { flex: 1, fontSize: 13 } }}>
-            {invalidSelected.length} product(s) are not valid. You can proceed to add {validSelected.length} products or change selection by going back to the previous screen.
-          </Text>
-          <DefaultButton text="Show errors" onClick={() => setSubView('showErrors')} styles={{ root: { flexShrink: 0 } }} />
-        </Stack>
-      )}
-
       <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-        <Text styles={{ root: { fontSize: 13 } }}>Showing <strong>{filteredReviewProducts.length}</strong> items to configure</Text>
-        <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 4 }}>
-          <Icon iconName="ColumnOptions" styles={{ root: { color: theme.palette.neutralSecondary } }} />
-          <Text styles={{ root: { fontSize: 13, color: theme.palette.neutralSecondary } }}>Columns</Text>
-        </Stack>
+        <Text styles={{ root: { fontSize: 13 } }}>Showing {filteredReviewProducts.length} items to configure</Text>
+        <ActionButton iconProps={{ iconName: 'ColumnOptions' }} text="Columns" />
       </Stack>
 
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <DetailsList items={pagedReviewProducts} columns={reviewColumns} selectionMode={SelectionMode.none} layoutMode={DetailsListLayoutMode.justified} compact getKey={(item) => (item as ICatalogProduct).id} />
+        <DetailsList
+          items={pagedReviewProducts}
+          columns={reviewColumns}
+          selectionMode={SelectionMode.none}
+          layoutMode={DetailsListLayoutMode.justified}
+          compact
+          getKey={(item) => (item as ICatalogProduct).id}
+        />
       </div>
 
       {/* Review pagination */}
@@ -820,13 +759,12 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
 
   const renderConfigureStep = () => (
     <Stack tokens={{ childrenGap: 16 }} styles={{ root: { flex: 1 } }}>
+      <Link onClick={() => { setCurrentStep('review'); setSubView('main'); }} styles={{ root: { fontSize: 13 } }}>
+        <Icon iconName="ChevronLeft" styles={{ root: { fontSize: 10, marginRight: 4 } }} />Back
+      </Link>
       <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }}>
         <Text styles={{ root: { fontSize: 14 } }}><strong>{validSelected.length}</strong> product(s) selected</Text>
         <Icon iconName="Info" styles={{ root: { color: theme.palette.themePrimary, fontSize: 14 } }} />
-      </Stack>
-      <Stack horizontal horizontalAlign="end" verticalAlign="center" tokens={{ childrenGap: 4 }}>
-        <Icon iconName="ColumnOptions" styles={{ root: { color: theme.palette.neutralSecondary } }} />
-        <Text styles={{ root: { fontSize: 13, color: theme.palette.neutralSecondary } }}>Columns</Text>
       </Stack>
       <MessageBar messageBarType={MessageBarType.warning} isMultiline={false}>
         Please ensure that products are allocated to the tenants with the same Cloud scope. Difference in Cloud scope of tenant and allocated product will block CPS generation.
@@ -853,8 +791,8 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
         const mappedCode = productAmendmentMap.get(p.id);
         return mappedCode ? { ...p, amendmentCode: mappedCode } : p;
       });
-    onConfirmSelection(toAdd);
-  }, [validSelected, selectedProducts, onConfirmSelection, productAmendmentMap]);
+    onConfirmSelection(toAdd, selectedTenants);
+  }, [validSelected, selectedProducts, onConfirmSelection, productAmendmentMap, selectedTenants]);
 
   const onRenderFooterContent = React.useCallback(
     () => (
@@ -884,7 +822,6 @@ export const ProductSearchPanel: React.FC<IProductSearchPanelProps> = ({
 
   const renderMainContent = () => {
     if (subView === 'addedProducts') return renderAddedProductsView();
-    if (subView === 'showErrors') return renderShowErrorsView();
     if (currentStep === 'search') return renderSearchStep();
     if (currentStep === 'review') return renderReviewStep();
     return renderConfigureStep();

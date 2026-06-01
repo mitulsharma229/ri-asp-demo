@@ -8,6 +8,7 @@ import { Dropdown } from '@fluentui/react/lib/Dropdown';
 import { Toggle } from '@fluentui/react/lib/Toggle';
 import { Link } from '@fluentui/react/lib/Link';
 import { Icon } from '@fluentui/react/lib/Icon';
+import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
 import { useTheme, ITheme } from '@fluentui/react';
 import { mergeStyleSets } from '@fluentui/merge-styles';
 import { memoizeFunction } from '@fluentui/utilities';
@@ -136,6 +137,11 @@ export const DocumentsPage: React.FC<IDocumentsPageProps> = ({
         styles={{ dropdown: { width: 200 } }}
       />
 
+      {/* Info message bar */}
+      <MessageBar messageBarType={MessageBarType.info}>
+        Summary of RI ASP product and discount configuration will be available in the generated Amendment document.
+      </MessageBar>
+
       {/* Blue banner */}
       <div className={classNames.banner}>
         <Icon iconName="AirplaneSolid" className={classNames.bannerIcon} />
@@ -191,7 +197,7 @@ export const DocumentsPage: React.FC<IDocumentsPageProps> = ({
         onClick={() => setUploadExpanded(!uploadExpanded)}
       >
         <Text styles={{ root: { fontWeight: 600 } }}>Uploaded documents (0)</Text>
-        <Icon iconName={uploadExpanded ? 'ChevronRight' : 'ChevronRight'} />
+        <Icon iconName={uploadExpanded ? 'ChevronDown' : 'ChevronRight'} />
       </Stack>
 
       {/* Supporting documents */}

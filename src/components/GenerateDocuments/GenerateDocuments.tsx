@@ -9,7 +9,6 @@ import { Icon } from '@fluentui/react/lib/Icon';
 import { Link } from '@fluentui/react/lib/Link';
 import { Dialog, DialogType, DialogFooter } from '@fluentui/react/lib/Dialog';
 import { TextField } from '@fluentui/react/lib/TextField';
-import { Toggle } from '@fluentui/react/lib/Toggle';
 import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
 import { useTheme, ITheme } from '@fluentui/react';
 import { mergeStyleSets } from '@fluentui/merge-styles';
@@ -74,9 +73,10 @@ interface IProgressItem {
 export interface IGenerateDocumentsProps {
   onComplete: () => void;
   hasErrors: boolean;
+  onGoToErrors?: () => void;
 }
 
-export const GenerateDocuments: React.FC<IGenerateDocumentsProps> = ({ onComplete, hasErrors }) => {
+export const GenerateDocuments: React.FC<IGenerateDocumentsProps> = ({ onComplete, hasErrors, onGoToErrors }) => {
   const theme = useTheme();
   const classNames = getClassNames(theme);
   const [phase, setPhase] = React.useState<GeneratePhase>('configure');
@@ -84,10 +84,10 @@ export const GenerateDocuments: React.FC<IGenerateDocumentsProps> = ({ onComplet
   const [cpsChecked, setCpsChecked] = React.useState(false);
   const [amendmentsChecked, setAmendmentsChecked] = React.useState(false);
   const [attestationDialogOpen, setAttestationDialogOpen] = React.useState(false);
-  const [attestationChecked, setAttestationChecked] = React.useState(false);
+  const [attestation1, setAttestation1] = React.useState(false);
+  const [attestation2, setAttestation2] = React.useState(false);
+  const [attestation3, setAttestation3] = React.useState(false);
   const [notesToApprover, setNotesToApprover] = React.useState('');
-  const [containsACO, setContainsACO] = React.useState(false);
-  const [containsECIF, setContainsECIF] = React.useState(false);
   const [cpsProgress, setCpsProgress] = React.useState(0);
   const [amendmentProgress, setAmendmentProgress] = React.useState(0);
   const [cpsItems, setCpsItems] = React.useState<IProgressItem[]>([]);
@@ -178,7 +178,7 @@ export const GenerateDocuments: React.FC<IGenerateDocumentsProps> = ({ onComplet
                     1 error(s) found in this scenario. Rectify all errors before generating the price sheet.
                   </Text>
                 </Stack>
-                <PrimaryButton text="Go to errors" styles={{ root: { width: 'fit-content' } }} />
+                <PrimaryButton text="Go to errors" styles={{ root: { width: 'fit-content' } }} onClick={onGoToErrors} />
               </Stack>
             )}
             <Stack className={classNames.noteBox} tokens={{ childrenGap: 6 }}>
@@ -224,7 +224,7 @@ export const GenerateDocuments: React.FC<IGenerateDocumentsProps> = ({ onComplet
                     1 error(s) found in this scenario. Rectify all errors before generating the price sheet.
                   </Text>
                 </Stack>
-                <PrimaryButton text="Go to errors" styles={{ root: { width: 'fit-content' } }} />
+                <PrimaryButton text="Go to errors" styles={{ root: { width: 'fit-content' } }} onClick={onGoToErrors} />
               </Stack>
             )}
             <Stack className={classNames.noteBox} tokens={{ childrenGap: 6 }}>
@@ -242,6 +242,30 @@ export const GenerateDocuments: React.FC<IGenerateDocumentsProps> = ({ onComplet
                 </Stack>
               </Stack>
             </Stack>
+          </Stack>
+
+          {/* Notes to approver */}
+          <Stack tokens={{ childrenGap: 8 }}>
+            <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 4 }}>
+              <Text styles={{ root: { fontWeight: 600, fontSize: 14 } }}>Notes to approver</Text>
+              <Icon iconName="Info" styles={{ root: { fontSize: 12, color: theme.palette.neutralSecondary } }} />
+            </Stack>
+            <TextField
+              multiline
+              rows={3}
+              value={notesToApprover}
+              onChange={(_, val) => setNotesToApprover(val || '')}
+              placeholder="Enter notes for the approver..."
+            />
+          </Stack>
+
+          {/* Attach supporting documents */}
+          <Stack tokens={{ childrenGap: 8 }}>
+            <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 4 }}>
+              <Text styles={{ root: { fontWeight: 600, fontSize: 14 } }}>Attach supporting document(s)</Text>
+              <Icon iconName="Info" styles={{ root: { fontSize: 12, color: theme.palette.neutralSecondary } }} />
+            </Stack>
+            <Link styles={{ root: { fontSize: 13 } }}>Upload documents</Link>
           </Stack>
         </>
       )}
@@ -313,7 +337,7 @@ export const GenerateDocuments: React.FC<IGenerateDocumentsProps> = ({ onComplet
             Documents generated successfully
           </Text>
           <Text styles={{ root: { fontSize: 13 } }}>
-            You will be redirected to the documents page.
+            You will be redirected to the documents in 5 sec
           </Text>
           <Link onClick={onComplete}>Go to documents now</Link>
         </Stack>
@@ -332,24 +356,24 @@ export const GenerateDocuments: React.FC<IGenerateDocumentsProps> = ({ onComplet
         minWidth={500}
       >
         <Stack tokens={{ childrenGap: 16 }}>
-          <Toggle label="Does this scenario contain ACO?" checked={containsACO} onChange={(_, c) => setContainsACO(!!c)} />
-          <Toggle label="Does this scenario contain ECIF?" checked={containsECIF} onChange={(_, c) => setContainsECIF(!!c)} />
-          <TextField
-            label="Notes to approver"
-            multiline
-            rows={3}
-            value={notesToApprover}
-            onChange={(_, val) => setNotesToApprover(val || '')}
-            placeholder="To enter multiple values, separate by comma (,)"
+          <Checkbox
+            label="All required legal text is included in the Price Sheet as per Microsoft business policy."
+            checked={attestation1}
+            onChange={(_, c) => setAttestation1(!!c)}
           />
           <Checkbox
-            label="I attest that I have reviewed all the information and it is accurate."
-            checked={attestationChecked}
-            onChange={(_, c) => setAttestationChecked(!!c)}
+            label="Discount justification, if applicable, are up to date."
+            checked={attestation2}
+            onChange={(_, c) => setAttestation2(!!c)}
+          />
+          <Checkbox
+            label="Reviewed the latest deal totality information"
+            checked={attestation3}
+            onChange={(_, c) => setAttestation3(!!c)}
           />
         </Stack>
         <DialogFooter>
-          <PrimaryButton text="Generate" onClick={startGeneration} disabled={!attestationChecked} />
+          <PrimaryButton text="Generate" onClick={startGeneration} disabled={!(attestation1 && attestation2 && attestation3)} />
           <DefaultButton text="Cancel" onClick={() => setAttestationDialogOpen(false)} />
         </DialogFooter>
       </Dialog>
