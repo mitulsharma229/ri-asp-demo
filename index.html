@@ -9,6 +9,14 @@
     <link rel="stylesheet" crossorigin href="/ri-asp-demo/assets/index-DyzJ8x1d.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
+    <script>
+      window.onerror = function(msg, src, line, col, err) {
+        document.getElementById('root').innerHTML = '<pre style="color:red;padding:20px;white-space:pre-wrap">' + msg + '\n' + src + ':' + line + '\n' + (err && err.stack || '') + '</pre>';
+      };
+      window.addEventListener('unhandledrejection', function(e) {
+        document.getElementById('root').innerHTML = '<pre style="color:red;padding:20px;white-space:pre-wrap">Unhandled rejection: ' + e.reason + '</pre>';
+      });
+    </script>
   </body>
 </html>
