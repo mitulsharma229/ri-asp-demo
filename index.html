@@ -2,17 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/ri-asp-demo/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/ri-asp-prototype/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vite + React + TS</title>
-    <script type="module" crossorigin src="/ri-asp-demo/assets/index-B5nAT6PD.js"></script>
-    <link rel="stylesheet" crossorigin href="/ri-asp-demo/assets/index-DyzJ8x1d.css">
+    <script type="module" crossorigin src="/ri-asp-prototype/assets/index-CD6CHZ21.js"></script>
+    <link rel="stylesheet" crossorigin href="/ri-asp-prototype/assets/index-DyzJ8x1d.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="loading-indicator" style="padding:20px;font-family:sans-serif;color:#555">Loading app...</div>
+    </div>
     <script>
       window.onerror = function(msg, src, line, col, err) {
-        document.getElementById('root').innerHTML = '<pre style="color:red;padding:20px;white-space:pre-wrap">' + msg + '\n' + src + ':' + line + '\n' + (err && err.stack || '') + '</pre>';
+        document.getElementById('root').innerHTML = '<pre style="color:red;padding:20px;white-space:pre-wrap">JS ERROR: ' + msg + '\n' + src + ':' + line + '\n' + (err && err.stack || '') + '</pre>';
+        return true;
       };
       window.addEventListener('unhandledrejection', function(e) {
         document.getElementById('root').innerHTML = '<pre style="color:red;padding:20px;white-space:pre-wrap">Unhandled rejection: ' + e.reason + '</pre>';
