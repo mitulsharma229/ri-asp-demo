@@ -294,6 +294,26 @@ const RegionMultiSelect: React.FC<{
         >
           <div style={{ width: 320, maxHeight: 360, display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+              {/* Select all row */}
+              {(() => {
+                const allKeys = REGION_GROUPS.flatMap((g) => g.children.map((c) => c.key));
+                const allSelected = allKeys.every((k) => tempSelected.includes(k));
+                const someSelected = !allSelected && allKeys.some((k) => tempSelected.includes(k));
+                return (
+                  <div style={{ padding: '4px 8px' }}>
+                    <Checkbox
+                      label="(Select all)"
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={() => {
+                        if (allSelected) setTempSelected([]);
+                        else setTempSelected(allKeys);
+                      }}
+                      styles={{ label: { fontWeight: 600, fontSize: 13 } }}
+                    />
+                  </div>
+                );
+              })()}
               {REGION_GROUPS.map((group) => {
                 const allKeys = group.children.map((c) => c.key);
                 const allSelected = allKeys.every((k) => tempSelected.includes(k));
@@ -437,6 +457,18 @@ export const ProductGrid: React.FC<IProductGridProps> = ({
   const [skuEndDateCalendarOpen, setSkuEndDateCalendarOpen] = React.useState<string | null>(null);
   const skuStartDateRefs = React.useRef<Map<string, HTMLElement>>(new Map());
   const skuEndDateRefs = React.useRef<Map<string, HTMLElement>>(new Map());
+  // Bulk edit within Edit SKUs panel
+  const [skuBulkEditOpen, setSkuBulkEditOpen] = React.useState(false);
+  const [skuBulkDiscount, setSkuBulkDiscount] = React.useState('');
+  const [skuBulkStartDate, setSkuBulkStartDate] = React.useState('');
+  const [skuBulkEndDate, setSkuBulkEndDate] = React.useState('');
+  const [skuBulkSuccessMsg, setSkuBulkSuccessMsg] = React.useState(false);
+  const [skuBulkStartCalOpen, setSkuBulkStartCalOpen] = React.useState(false);
+  const [skuBulkEndCalOpen, setSkuBulkEndCalOpen] = React.useState(false);
+  const skuBulkBtnRef = React.useRef<HTMLDivElement>(null);
+  const skuBulkStartDateRef = React.useRef<HTMLDivElement>(null);
+  const skuBulkEndDateRef = React.useRef<HTMLDivElement>(null);
+  const [skuSearchQuery, setSkuSearchQuery] = React.useState('');
 
   // SKU reset warning state
   const [skuResetWarningOpen, setSkuResetWarningOpen] = React.useState(false);
@@ -472,13 +504,15 @@ export const ProductGrid: React.FC<IProductGridProps> = ({
 
   const skusByRegion: Map<string, ISku[]> = React.useMemo(() => {
     if (!editSkuProduct || !editSkuProduct.skus) return new Map();
+    const q = skuSearchQuery.trim().toLowerCase();
     const regionMap = new Map<string, ISku[]>();
     editSkuProduct.skus.forEach((sku) => {
+      if (q && !`${sku.skuType} ${sku.region} ${sku.commitment}`.toLowerCase().includes(q)) return;
       if (!regionMap.has(sku.region)) regionMap.set(sku.region, []);
       regionMap.get(sku.region)!.push(sku);
     });
     return regionMap;
-  }, [editSkuProduct]);
+  }, [editSkuProduct, skuSearchQuery]);
 
   const skuHasEdits = React.useMemo(() => {
     if (!editSkuProduct || !editSkuProduct.skus) return false;
@@ -495,6 +529,7 @@ export const ProductGrid: React.FC<IProductGridProps> = ({
     const product = products.find((p) => p.id === productId);
     if (!product || !product.skus || product.skus.length === 0) return;
     setEditSkuProductId(productId);
+    setCheckedIds(new Set([productId]));
     setSkuChecked(new Set(product.selectedSkuIds || []));
     const edits = new Map<string, Partial<ISku>>();
     product.skus.forEach((sku) => {
@@ -527,6 +562,7 @@ export const ProductGrid: React.FC<IProductGridProps> = ({
       edits.set(sku.id, { discountPercent: editSkuProduct.discountPercent, startDate: editSkuProduct.startDate, endDate: editSkuProduct.endDate });
     });
     setSkuEdits(edits);
+    setSkuChecked(new Set());
   };
 
   const handleSkuEdit = (skuId: string, field: keyof ISku, value: string | number) => {
@@ -536,6 +572,36 @@ export const ProductGrid: React.FC<IProductGridProps> = ({
       next.set(skuId, { ...existing, [field]: value });
       return next;
     });
+  };
+
+  const handleSkuBulkEditApply = () => {
+    skuChecked.forEach((skuId) => {
+      if (skuBulkDiscount !== '') {
+        const n = parseFloat(skuBulkDiscount);
+        if (!isNaN(n) && n >= 0 && n <= 100) handleSkuEdit(skuId, 'discountPercent', n);
+      }
+      if (skuBulkStartDate !== '' && skuBulkStartDate !== 'On specific date') {
+        handleSkuEdit(skuId, 'startDate', skuBulkStartDate);
+      }
+      if (skuBulkEndDate !== '' && skuBulkEndDate !== 'On specific date') {
+        if (DURATION_KEYS.has(skuBulkEndDate)) {
+          const sku = editSkuProduct?.skus?.find((s) => s.id === skuId);
+          const effectiveStart = skuBulkStartDate && skuBulkStartDate !== 'On specific date'
+            ? skuBulkStartDate
+            : (skuEdits.get(skuId)?.startDate ?? sku?.startDate ?? '') as string;
+          const computed = computeEndDateFromDuration(effectiveStart, skuBulkEndDate);
+          handleSkuEdit(skuId, 'endDate', computed);
+        } else {
+          handleSkuEdit(skuId, 'endDate', skuBulkEndDate);
+        }
+      }
+    });
+    setSkuBulkEditOpen(false);
+    setSkuBulkDiscount('');
+    setSkuBulkStartDate('');
+    setSkuBulkEndDate('');
+    setSkuBulkSuccessMsg(true);
+    setTimeout(() => setSkuBulkSuccessMsg(false), 4000);
   };
 
   const hasChecked = checkedIds.size > 0;
@@ -1628,21 +1694,18 @@ export const ProductGrid: React.FC<IProductGridProps> = ({
             </Stack>
             <Stack tokens={{ childrenGap: 4 }}>
               <Text styles={{ root: { fontWeight: 600, fontSize: 13 } }}>Tenant(s)</Text>
-              <Checkbox
-                label="(Select all)"
-                checked={pendingTenants.length === availableTenants.length && availableTenants.length > 0}
-                indeterminate={pendingTenants.length > 0 && pendingTenants.length < availableTenants.length}
-                onChange={(_, checked) => {
-                  setPendingTenants(checked ? [...availableTenants] : []);
-                }}
-                styles={{ label: { fontWeight: 600 } }}
-              />
               <Dropdown
                 selectedKeys={pendingTenants}
                 multiSelect
-                options={availableTenants.map((k) => ({ key: k, text: TENANT_OPTIONS.find((t) => t.key === k)?.text || k }))}
+                options={[
+                  { key: '__select_all__', text: '(Select all)' },
+                  ...availableTenants.map((k) => ({ key: k, text: TENANT_OPTIONS.find((t) => t.key === k)?.text || k })),
+                ]}
                 onChange={(_, opt) => {
-                  if (opt) {
+                  if (!opt) return;
+                  if (opt.key === '__select_all__') {
+                    setPendingTenants(opt.selected ? [...availableTenants] : []);
+                  } else {
                     setPendingTenants((prev) =>
                       opt.selected ? [...prev, opt.key as string] : prev.filter((k) => k !== opt.key)
                     );
@@ -1955,21 +2018,42 @@ export const ProductGrid: React.FC<IProductGridProps> = ({
         }}
         onRenderFooterContent={() => (
           <Stack horizontal tokens={{ childrenGap: 8 }}>
-            <PrimaryButton text="Apply" onClick={handleSkuApply} />
+            <PrimaryButton text="Save" onClick={handleSkuApply} />
             <DefaultButton text="Cancel" onClick={() => setEditSkuProductId(null)} />
           </Stack>
         )}
       >
-        <Stack tokens={{ childrenGap: 10 }}>
+        <Stack tokens={{ childrenGap: 10 }} styles={{ root: { height: '100%', display: 'flex', flexDirection: 'column' } }}>
           <Text styles={{ root: { fontSize: 13, lineHeight: '20px', color: theme.palette.neutralSecondary, marginBottom: 8 } }}>
             Select the SKUs that you want to configure as a part of the product. Once you are done with selecting and editing the SKUs (if required), click on apply.
           </Text>
+
+          {skuBulkSuccessMsg && (
+            <MessageBar messageBarType={MessageBarType.success} onDismiss={() => setSkuBulkSuccessMsg(false)} dismissButtonAriaLabel="Close">
+              Bulk changes saved successfully!
+            </MessageBar>
+          )}
 
           <MessageBar messageBarType={MessageBarType.info} styles={{ root: { fontSize: 12 } }}>
             By default, SKU discount, start date, and end date are inherited from the parent product. You can override these values by entering new ones in the respective fields.
           </MessageBar>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', marginBottom: 4 }}>
+            <div ref={skuBulkBtnRef}>
+              <ActionButton
+                iconProps={{ iconName: 'Edit' }}
+                text="Bulk edit"
+                disabled={skuChecked.size === 0}
+                onClick={() => setSkuBulkEditOpen((prev) => !prev)}
+                styles={{
+                  root: {
+                    fontSize: 12,
+                    backgroundColor: skuBulkEditOpen ? theme.palette.neutralLight : undefined,
+                    color: skuBulkEditOpen ? theme.palette.themePrimary : undefined,
+                  },
+                }}
+              />
+            </div>
             <ActionButton
               iconProps={{ iconName: 'Refresh' }}
               text="Reset to default"
@@ -1978,11 +2062,95 @@ export const ProductGrid: React.FC<IProductGridProps> = ({
               styles={{ root: { fontSize: 12 } }}
             />
             <Stack.Item grow={1}><span /></Stack.Item>
-            <SearchBox placeholder="Search" styles={{ root: { width: 300 } }} />
+            <SearchBox
+              placeholder="Search"
+              value={skuSearchQuery}
+              onChange={(_, val) => setSkuSearchQuery(val || '')}
+              onClear={() => setSkuSearchQuery('')}
+              styles={{ root: { width: 300 } }}
+            />
           </div>
 
-          {/* SKU Grid */}
-          <div style={{ overflow: 'auto', flex: 1 }}>
+          {/* SKU Grid + floating bulk edit overlay */}
+          <div style={{ position: 'relative', flex: 1, overflow: 'visible', display: 'flex', flexDirection: 'column' }}>
+            {/* Bulk edit popup — absolutely positioned over the grid, inside Panel DOM */}
+            {skuBulkEditOpen && (
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                zIndex: 100,
+                background: theme.palette.white,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+                border: `1px solid ${theme.palette.neutralLight}`,
+                borderRadius: 2,
+                padding: 16,
+                width: 320,
+                overflow: 'visible',
+              }}>
+                <Stack tokens={{ childrenGap: 12 }}>
+                  <Text styles={{ root: { fontWeight: 600, fontSize: 14 } }}>Edit the values for selected SKUs</Text>
+                  <TextField
+                    label="Discount %"
+                    placeholder="Enter value in %"
+                    value={skuBulkDiscount}
+                    onChange={(_, val) => setSkuBulkDiscount(val || '')}
+                    type="number"
+                    styles={{ fieldGroup: { height: 32 }, field: { fontSize: 12 } }}
+                  />
+                  <div ref={skuBulkStartDateRef} style={{ position: 'relative' }}>
+                    <Dropdown
+                      label="Start date"
+                      placeholder="Select date"
+                      selectedKey={skuBulkStartDate === 'At order acceptance' ? 'At order acceptance' : skuBulkStartDate ? 'On specific date' : undefined}
+                      options={SKU_START_DATE_OPTIONS}
+                      onChange={(_, opt) => {
+                        if (!opt) return;
+                        if (opt.key === 'On specific date') { setSkuBulkStartCalOpen(true); }
+                        else { setSkuBulkStartDate(opt.key as string); setSkuBulkStartCalOpen(false); }
+                      }}
+                      onRenderTitle={() => <span style={{ fontSize: 12 }}>{skuBulkStartDate || 'Select date'}</span>}
+                      styles={{ dropdown: { fontSize: 12 } }}
+                    />
+                    {skuBulkStartCalOpen && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 200, background: 'white', boxShadow: '0 4px 16px rgba(0,0,0,0.2)', border: `1px solid ${theme.palette.neutralLight}`, borderRadius: 2 }}>
+                        <Calendar onSelectDate={(date) => { if (date) { setSkuBulkStartDate(date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })); setSkuBulkStartCalOpen(false); } }} />
+                      </div>
+                    )}
+                  </div>
+                  <div ref={skuBulkEndDateRef} style={{ position: 'relative' }}>
+                    <Dropdown
+                      label="End date"
+                      placeholder="Select date"
+                      selectedKey={skuBulkEndDate && DURATION_KEYS.has(skuBulkEndDate) ? skuBulkEndDate : skuBulkEndDate ? 'On specific date' : undefined}
+                      options={skuEndDateOptions}
+                      onChange={(_, opt) => {
+                        if (!opt) return;
+                        if (opt.key === 'On specific date') { setSkuBulkEndCalOpen(true); }
+                        else { setSkuBulkEndDate(opt.key as string); setSkuBulkEndCalOpen(false); }
+                      }}
+                      onRenderTitle={() => <span style={{ fontSize: 12 }}>{skuBulkEndDate || 'Select date'}</span>}
+                      styles={{ dropdown: { fontSize: 12 } }}
+                    />
+                    {skuBulkEndCalOpen && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 200, background: 'white', boxShadow: '0 4px 16px rgba(0,0,0,0.2)', border: `1px solid ${theme.palette.neutralLight}`, borderRadius: 2 }}>
+                        <Calendar onSelectDate={(date) => { if (date) { setSkuBulkEndDate(date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })); setSkuBulkEndCalOpen(false); } }} />
+                      </div>
+                    )}
+                  </div>
+                  <Text styles={{ root: { fontSize: 11, color: theme.palette.neutralSecondary, fontStyle: 'italic' } }}>
+                    The input values apply only to the selected row item(s). If you do not wish to add a value in a field in bulk, you can skip it.
+                  </Text>
+                  <Stack horizontal tokens={{ childrenGap: 8 }}>
+                    <PrimaryButton text="Apply" onClick={handleSkuBulkEditApply} styles={{ root: { minWidth: 70 } }} />
+                    <DefaultButton text="Cancel" onClick={() => setSkuBulkEditOpen(false)} styles={{ root: { minWidth: 70 } }} />
+                  </Stack>
+                </Stack>
+              </div>
+            )}
+
+            {/* SKU Grid scrollable area */}
+            <div style={{ overflow: 'auto', flex: 1 }}>
             {/* Column Header Row */}
             <div style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${theme.palette.neutralLight}` }}>
               <div style={{ width: 36, flexShrink: 0, paddingLeft: 4 }}>
@@ -2093,6 +2261,7 @@ export const ProductGrid: React.FC<IProductGridProps> = ({
                 </div>
               );
             })}
+          </div>
           </div>
         </Stack>
       </Panel>

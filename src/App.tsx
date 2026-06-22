@@ -18,7 +18,7 @@ const appTheme = createTheme({
 function App() {
   return (
     <ThemeProvider theme={appTheme}>
-      <BrowserRouter basename="/ri-asp-demo">
+      <BrowserRouter basename="/ri-asp-prototype">
         <Routes>
           <Route path="/" element={<FutureProductsPage />} />
           <Route path="/sku-config" element={<SkuConfigWorkflow />} />

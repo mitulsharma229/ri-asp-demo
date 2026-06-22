@@ -192,14 +192,33 @@ export const FutureProductsPage: React.FC = () => {
   }, []);
 
   const handleDuplicateProducts = React.useCallback((ids: string[]) => {
+    let firstName = '';
     setProducts((prev) => {
-      const duplicates = prev
-        .filter((p) => ids.includes(p.id))
-        .map((p) => ({ ...p, id: `${p.id}-dup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` }));
-      return [...prev, ...duplicates];
+      const result: IAddedProduct[] = [];
+      prev.forEach((p) => {
+        result.push(p);
+        if (ids.includes(p.id)) {
+          if (!firstName) firstName = p.productDetails;
+          const newId = `${p.id}-dup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          result.push({
+            ...p,
+            id: newId,
+            skus: undefined,
+            selectedSkuIds: undefined,
+            discountPercent: 0,
+            priceNetUSD: p.basePriceNetUSD,
+            regions: [],
+            commitment: '',
+            startDate: '',
+            endDate: '',
+          });
+        }
+      });
+      return result;
     });
     setHasUnsavedChanges(true);
-    setSuccessMessage(`${ids.length} product(s) duplicated successfully!`);
+    const label = ids.length === 1 ? `"${firstName}"` : `${ids.length} products`;
+    setSuccessMessage(`${label} duplicated successfully!`);
     setTimeout(() => setSuccessMessage(''), 5000);
   }, []);
 
